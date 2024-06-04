@@ -75,12 +75,13 @@ pub fn build(b: *std.Build) void {
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const tests = b.addTest(.{
-        .root_source_file = b.path("src/test.zig"),
+        .root_source_file = b.path("test/fs.zig"),
         .target = target,
         .optimize = optimize,
     });
     tests.linkLibC();
     const run_tests = b.addRunArtifact(tests);
+    run_tests.setEnvironmentVariable("exe_path", std.fs.path.join(b.allocator, &[_][]const u8{ b.install_path, "bin", exe.out_filename }) catch unreachable);
 
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request

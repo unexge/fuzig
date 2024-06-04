@@ -159,6 +159,8 @@ pub const Filesystem = struct {
             .write = &Filesystem.write,
         };
 
+        log.info("mounting at {s}", .{mountpoint});
+
         return @intCast(libfuse.fuse_main_real(@intCast(fuse_args.len), @ptrCast(&fuse_args), &operations, @sizeOf(@TypeOf(operations)), @as(*anyopaque, @ptrCast(self))));
     }
 };

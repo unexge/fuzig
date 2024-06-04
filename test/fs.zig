@@ -14,13 +14,16 @@ const Suite = struct {
     pub fn init() !Suite {
         const temp_dir = testing.tmpDir(.{});
         const root = try temp_dir.dir.realpathAlloc(testing.allocator, ".");
+        defer testing.allocator.free(root);
 
-        // TODO: Is there a better way to get executable?
-        const args = &.{
-            "/app/zig-out/bin/fuzig",
+        const exe_path = try std.process.getEnvVarOwned(testing.allocator, "exe_path");
+        defer testing.allocator.free(exe_path);
+        const args = [_][]const u8{
+            exe_path,
             root,
         };
-        var child_process = process.Child.init(args, testing.allocator);
+        var child_process = process.Child.init(&args, testing.allocator);
+        child_process.stdout_behavior = .Inherit;
         child_process.stderr_behavior = .Inherit;
         try child_process.spawn();
 
