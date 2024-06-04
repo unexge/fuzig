@@ -28,13 +28,23 @@ pub const Directory = struct {
         try self.entries.put(name, .{ .directory = Directory.init(self.allocator) });
     }
 
-    pub fn write(self: *Directory, name: []const u8, content: []const u8) !void {
+    pub fn touch(self: *Directory, name: []const u8) !void {
         const entry = try self.entries.getOrPut(
             name,
         );
         if (entry.found_existing) {
             return error.AlreadyExists;
         }
+        entry.value_ptr.* = .{ .file = File.init("") };
+    }
+
+    pub fn write(self: *Directory, name: []const u8, content: []const u8) !void {
+        const entry = try self.entries.getOrPut(
+            name,
+        );
+        // if (entry.found_existing) {
+        //     return error.AlreadyExists;
+        // }
 
         entry.value_ptr.* = .{ .file = File.init(content) };
     }
