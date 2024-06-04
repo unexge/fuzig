@@ -74,18 +74,27 @@ pub fn build(b: *std.Build) void {
 
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
-    const tests = b.addTest(.{
+    const integ_tests = b.addTest(.{
         .root_source_file = b.path("test/fs.zig"),
         .target = target,
         .optimize = optimize,
     });
-    tests.linkLibC();
-    const run_tests = b.addRunArtifact(tests);
-    run_tests.setEnvironmentVariable("exe_path", std.fs.path.join(b.allocator, &[_][]const u8{ b.install_path, "bin", exe.out_filename }) catch unreachable);
+    integ_tests.linkLibC();
+    const run_integ_tests = b.addRunArtifact(integ_tests);
+    run_integ_tests.setEnvironmentVariable("exe_path", std.fs.path.join(b.allocator, &[_][]const u8{ b.install_path, "bin", exe.out_filename }) catch unreachable);
+
+    const unit_tests = b.addTest(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const run_unit_tests = b.addRunArtifact(unit_tests);
 
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_tests.step);
+    test_step.dependOn(&run_integ_tests.step);
+    test_step.dependOn(&run_unit_tests.step);
+    test_step.dependOn(&exe.step);
 }
