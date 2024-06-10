@@ -6,6 +6,21 @@ const testing = std.testing;
 const process = std.process;
 const c = std.c;
 
+const allocator = testing.allocator;
+
+fn stat(path: []const u8) !c.Stat {
+    const root = try allocator.dupeZ(u8, path);
+    defer allocator.free(root);
+
+    var s = mem.zeroes(c.Stat);
+    if (c.stat(root, &s) != 0) {
+        const errno = c._errno();
+        std.debug.panic("stat syscall failed: {d}", .{errno.*});
+    }
+
+    return s;
+}
+
 const Suite = struct {
     temp_dir: testing.TmpDir,
     root: []u8,
@@ -14,14 +29,14 @@ const Suite = struct {
 
     pub fn init() !Suite {
         const temp_dir = testing.tmpDir(.{});
-        const root = try temp_dir.dir.realpathAlloc(testing.allocator, ".");
+        const root = try temp_dir.dir.realpathAlloc(allocator, ".");
 
-        const exe_path = try std.process.getEnvVarOwned(testing.allocator, "exe_path");
+        const exe_path = try std.process.getEnvVarOwned(allocator, "exe_path");
         const args = [_][]const u8{
             exe_path,
             root,
         };
-        var child_process = process.Child.init(&args, testing.allocator);
+        var child_process = process.Child.init(&args, allocator);
         // Zig's test runner stucks if something is written to stdout without std.log:
         // https://github.com/ziglang/zig/issues/18111
         // We just pipe outputs and print them in `printOutput` using std.log.
@@ -36,15 +51,7 @@ const Suite = struct {
     }
 
     pub fn root_stat(self: @This()) !c.Stat {
-        const root = try fs.path.joinZ(testing.allocator, &.{ self.root, "." });
-        defer testing.allocator.free(root);
-
-        var stat = mem.zeroes(std.c.Stat);
-        if (std.c.stat(root, &stat) != 0) {
-            std.debug.panic("stat syscall failed", .{});
-        }
-
-        return stat;
+        return stat(self.root);
     }
 
     // Waits until FUSE fs is mounted.
@@ -56,18 +63,18 @@ const Suite = struct {
     // > path point to the same i-node on the same device —
     // > this should detect mount points for all Unix and POSIX variants.
     fn waitUntilFsMounted(self: @This()) !void {
-        const parent = try fs.path.joinZ(testing.allocator, &.{ self.root, ".." });
-        defer testing.allocator.free(parent);
+        const parent = try fs.path.joinZ(allocator, &.{ self.root, ".." });
+        defer allocator.free(parent);
 
-        var parent_stat = mem.zeroes(std.c.Stat);
-        if (std.c.stat(parent, &parent_stat) != 0) {
+        var parent_stat = mem.zeroes(c.Stat);
+        if (c.stat(parent, &parent_stat) != 0) {
             std.debug.panic("stat syscall failed", .{});
         }
 
         return for (0..10) |_| {
-            const stat = try self.root_stat();
-            if ((stat.dev != parent_stat.dev) or
-                (stat.ino == parent_stat.ino))
+            const s = try self.root_stat();
+            if ((s.dev != parent_stat.dev) or
+                (s.ino == parent_stat.ino))
             {
                 break;
             }
@@ -82,15 +89,15 @@ const Suite = struct {
 
         // We call `.toOwnedSlice()` below and free underlying slice there,
         // no need to call `defer deinit()` here.
-        var stdout = std.ArrayList(u8).init(testing.allocator);
-        var stderr = std.ArrayList(u8).init(testing.allocator);
+        var stdout = std.ArrayList(u8).init(allocator);
+        var stderr = std.ArrayList(u8).init(allocator);
 
         self.child_process.collectOutput(&stdout, &stderr, std.math.maxInt(usize)) catch unreachable;
 
         std.log.err("Output for {s} ---", .{self.root});
         {
             const buf = stdout.toOwnedSlice() catch unreachable;
-            defer testing.allocator.free(buf);
+            defer allocator.free(buf);
             std.log.err("[stdout] ---", .{});
             var iter = mem.splitScalar(u8, buf, '\n');
             while (iter.next()) |l| {
@@ -100,7 +107,7 @@ const Suite = struct {
 
         {
             const buf = stderr.toOwnedSlice() catch unreachable;
-            defer testing.allocator.free(buf);
+            defer allocator.free(buf);
             std.log.err("[stderr] ---", .{});
             var iter = mem.splitScalar(u8, buf, '\n');
             while (iter.next()) |l| {
@@ -117,8 +124,8 @@ const Suite = struct {
         self.sigterm() catch unreachable;
         _ = self.child_process.wait() catch unreachable;
         self.temp_dir.cleanup();
-        testing.allocator.free(self.root);
-        testing.allocator.free(self.exe_path);
+        allocator.free(self.root);
+        allocator.free(self.exe_path);
     }
 };
 
@@ -127,8 +134,8 @@ test "creating and reading a file" {
     defer suite.deinit();
     errdefer suite.terminateAndPrintOutput();
 
-    const path = try fs.path.join(testing.allocator, &.{ suite.root, "hello" });
-    defer testing.allocator.free(path);
+    const path = try fs.path.join(allocator, &.{ suite.root, "hello" });
+    defer allocator.free(path);
 
     const file_to_write = try fs.createFileAbsolute(path, .{});
     try file_to_write.writeAll("hello world!");
@@ -136,20 +143,67 @@ test "creating and reading a file" {
 
     const file_to_read = try fs.openFileAbsolute(path, .{});
     defer file_to_read.close();
-    const read = try file_to_read.readToEndAlloc(testing.allocator, 1024);
-    defer testing.allocator.free(read);
+    const read = try file_to_read.readToEndAlloc(allocator, 1024);
+    defer allocator.free(read);
 
-    try testing.expect(mem.eql(u8, read, "hello world!"));
+    try testing.expectEqualStrings("hello world!", read);
 }
 
-test "stat `/`" {
+test "listing a directory" {
     var suite = try Suite.init();
     defer suite.deinit();
     errdefer suite.terminateAndPrintOutput();
 
-    const stat = try suite.root_stat();
+    var dir = try fs.openDirAbsolute(suite.root, .{ .iterate = true });
+    defer dir.close();
+
+    {
+        var iter = dir.iterate();
+        try testing.expectEqual(null, try iter.next());
+    }
+
+    {
+        const path = try fs.path.join(allocator, &.{ suite.root, "hello" });
+        defer allocator.free(path);
+
+        const f = try fs.createFileAbsolute(path, .{});
+        f.close();
+
+        var iter = dir.iterate();
+
+        const entry = try iter.next();
+        try testing.expectEqualStrings("hello", entry.?.name);
+
+        try testing.expectEqual(null, try iter.next());
+    }
+}
+
+test "stat a directory" {
+    var suite = try Suite.init();
+    defer suite.deinit();
+    errdefer suite.terminateAndPrintOutput();
+
+    const s = try suite.root_stat();
 
     // Empty folder
-    try testing.expect(stat.nlink == 2);
-    try testing.expect(std.c.S.ISDIR(stat.mode));
+    try testing.expect(s.nlink == 2);
+    try testing.expect(c.S.ISDIR(s.mode));
+}
+
+test "stat a file" {
+    var suite = try Suite.init();
+    defer suite.deinit();
+    errdefer suite.terminateAndPrintOutput();
+
+    const path = try fs.path.join(allocator, &.{ suite.root, "hello" });
+    defer allocator.free(path);
+
+    const f = try fs.createFileAbsolute(path, .{});
+    try f.writeAll("hello world!");
+    f.close();
+
+    const s = try stat(path);
+
+    try testing.expect(s.nlink == 1);
+    try testing.expect(c.S.ISREG(s.mode));
 }
