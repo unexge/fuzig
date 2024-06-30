@@ -105,6 +105,14 @@ impl super::csi::controller_server::Controller for Controller {
                         },
                     )),
                 },
+                ControllerServiceCapability {
+                    r#type: Some(controller_service_capability::Type::Rpc(
+                        controller_service_capability::Rpc {
+                            r#type: controller_service_capability::rpc::Type::CreateDeleteVolume
+                                .into(),
+                        },
+                    )),
+                },
             ],
         }))
     }
