@@ -1,3 +1,4 @@
+use tokio::fs;
 use tokio::process::Command;
 use tonic::{Request, Response, Status};
 
@@ -22,14 +23,14 @@ impl super::csi::node_server::Node for Node {
         &self,
         _: Request<NodeStageVolumeRequest>,
     ) -> Result<Response<NodeStageVolumeResponse>, Status> {
-        Err(Status::unimplemented("not implemented"))
+        Ok(Response::new(NodeStageVolumeResponse {}))
     }
 
     async fn node_unstage_volume(
         &self,
         _: Request<NodeUnstageVolumeRequest>,
     ) -> Result<Response<NodeUnstageVolumeResponse>, Status> {
-        Err(Status::unimplemented("not implemented"))
+        Ok(Response::new(NodeUnstageVolumeResponse {}))
     }
 
     async fn node_publish_volume(
@@ -37,6 +38,11 @@ impl super::csi::node_server::Node for Node {
         req: Request<NodePublishVolumeRequest>,
     ) -> Result<Response<NodePublishVolumeResponse>, Status> {
         let target_path = req.get_ref().target_path.clone();
+
+        // Create target path if not exists, otherwise fuse fails to mount
+        let _ = fs::File::create_new(&target_path).await;
+
+        tracing::info!(target_path = target_path, "mounting volume");
 
         Command::new(self.fuzig_bin.clone())
             .arg(target_path)
@@ -51,6 +57,8 @@ impl super::csi::node_server::Node for Node {
     ) -> Result<Response<NodeUnpublishVolumeResponse>, Status> {
         let target_path = req.get_ref().target_path.clone();
 
+        tracing::info!(target_path = target_path, "unmounting volume");
+
         Command::new(self.umount_bin.clone())
             .arg(target_path)
             .spawn()?;
@@ -62,7 +70,10 @@ impl super::csi::node_server::Node for Node {
         &self,
         _: Request<NodeGetVolumeStatsRequest>,
     ) -> Result<Response<NodeGetVolumeStatsResponse>, Status> {
-        Err(Status::unimplemented("not implemented"))
+        Ok(Response::new(NodeGetVolumeStatsResponse {
+            usage: vec![],
+            volume_condition: None,
+        }))
     }
 
     async fn node_expand_volume(
@@ -76,13 +87,19 @@ impl super::csi::node_server::Node for Node {
         &self,
         _: Request<NodeGetCapabilitiesRequest>,
     ) -> Result<Response<NodeGetCapabilitiesResponse>, Status> {
-        Err(Status::unimplemented("not implemented"))
+        Ok(Response::new(NodeGetCapabilitiesResponse {
+            capabilities: vec![],
+        }))
     }
 
     async fn node_get_info(
         &self,
         _: Request<NodeGetInfoRequest>,
     ) -> Result<Response<NodeGetInfoResponse>, Status> {
-        Err(Status::unimplemented("not implemented"))
+        Ok(Response::new(NodeGetInfoResponse {
+            node_id: "node-id".to_string(),
+            max_volumes_per_node: 1,
+            accessible_topology: None,
+        }))
     }
 }

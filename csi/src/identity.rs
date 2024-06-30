@@ -1,5 +1,10 @@
 use tonic::{Request, Response, Status};
 
+use crate::csi::{
+    plugin_capability::{self},
+    PluginCapability,
+};
+
 use super::csi::{
     GetPluginCapabilitiesRequest, GetPluginCapabilitiesResponse, GetPluginInfoRequest,
     GetPluginInfoResponse, ProbeRequest, ProbeResponse,
@@ -26,7 +31,13 @@ impl super::csi::identity_server::Identity for Identity {
         _: Request<GetPluginCapabilitiesRequest>,
     ) -> Result<Response<GetPluginCapabilitiesResponse>, Status> {
         Ok(Response::new(GetPluginCapabilitiesResponse {
-            capabilities: vec![],
+            capabilities: vec![PluginCapability {
+                r#type: Some(plugin_capability::Type::Service(
+                    plugin_capability::Service {
+                        r#type: plugin_capability::service::Type::ControllerService.into(),
+                    },
+                )),
+            }],
         }))
     }
 

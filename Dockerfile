@@ -24,6 +24,11 @@ RUN cargo install --path .
 
 # Final image with fuzig and csi driver
 FROM alpine
+
+RUN apk add --no-cache \
+    fuse3
+
 COPY --from=fuzig /app/zig-out/bin/fuzig /fuzig/fuzig
 COPY --from=csi /usr/local/cargo/bin/fuzig-csi /fuzig/fuzig-csi
+
 ENTRYPOINT ["/fuzig/fuzig-csi"]
