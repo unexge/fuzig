@@ -4,7 +4,7 @@ use tokio::net::UnixListener;
 use tokio::signal;
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::transport::Server;
-use tower_http::trace::TraceLayer;
+use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 
 use csi::controller_server::ControllerServer;
 use csi::identity_server::IdentityServer;
@@ -41,7 +41,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(endpoint = args.endpoint, "starting gRPC server");
 
     Server::builder()
-        .layer(TraceLayer::new_for_grpc())
+        .layer(
+            TraceLayer::new_for_grpc()
+                .make_span_with(DefaultMakeSpan::new().level(tracing::Level::INFO)),
+        )
         .add_service(IdentityServer::new(identity::Identity {}))
         .add_service(NodeServer::new(node::Node {
             fuzig_bin: args.fuzig_bin,
