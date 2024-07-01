@@ -20,7 +20,9 @@ RUN apk add --no-cache \
 WORKDIR /app
 COPY csi .
 
-RUN cargo install --path .
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    cargo install --path .
 
 # Final image with fuzig and csi driver
 FROM alpine
