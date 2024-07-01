@@ -8,7 +8,7 @@ pub fn build(b: *std.Build) void {
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
     // for restricting supported target set are available.
-    const target = b.standardTargetOptions(.{});
+    const target = b.standardTargetOptions(.{ .default_target = .{ .abi = .musl } });
 
     // Standard optimization options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
@@ -40,8 +40,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    b.addSearchPrefix("/usr");
     exe.root_module.addImport("libfuse", libfuse);
-    exe.linkSystemLibrary("fuse3");
+    exe.linkSystemLibrary2("fuse3", .{ .preferred_link_mode = .static });
     exe.linkLibC();
 
     // This declares intent for the executable to be installed into the

@@ -2,7 +2,7 @@
 FROM alpine as fuzig
 
 RUN apk add --no-cache \
-    fuse3 fuse3-dev \
+    fuse3-dev fuse3-static \
     zig
 
 WORKDIR /app
@@ -26,9 +26,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 # Final image with fuzig and csi driver
 FROM alpine
-
-RUN apk add --no-cache \
-    fuse3
 
 COPY --from=fuzig /app/zig-out/bin/fuzig /fuzig/fuzig
 COPY --from=csi /usr/local/cargo/bin/fuzig-csi /fuzig/fuzig-csi
