@@ -40,7 +40,12 @@ impl super::csi::node_server::Node for Node {
         let target_path = req.get_ref().target_path.clone();
 
         // Create target path if not exists, otherwise fuse fails to mount
-        let _ = fs::File::create_new(&target_path).await;
+        if !fs::try_exists(&target_path).await? {
+            fs::DirBuilder::new()
+                .mode(0o755)
+                .create(&target_path)
+                .await?;
+        }
 
         tracing::info!(target_path = target_path, "mounting volume");
 

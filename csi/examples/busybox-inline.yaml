@@ -1,0 +1,21 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: busybox-inline
+spec:
+  containers:
+    - name: busybox
+      image: busybox:1.28
+      command: ["/bin/sh"]
+      args:
+        [
+          "-c",
+          "echo hello > /mnt/fuzig/world && cat /mnt/fuzig/world && sleep 100",
+        ]
+      volumeMounts:
+        - mountPath: "/mnt/fuzig"
+          name: fuzig-inline-vol
+  volumes:
+    - name: fuzig-inline-vol
+      csi:
+        driver: fuzig

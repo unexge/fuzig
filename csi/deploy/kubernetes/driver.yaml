@@ -1,0 +1,63 @@
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: fuzig
+spec:
+  volumeLifecycleModes:
+    - Ephemeral
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fuzig-node
+spec:
+  selector:
+    matchLabels:
+      name: fuzig-node
+  template:
+    metadata:
+      labels:
+        name: fuzig-node
+    spec:
+      containers:
+        - name: fuzig-node
+          image: fuzig:latest
+          imagePullPolicy: Never # This is needed for local images in minikube.
+          args:
+            - --endpoint=/csi/csi.sock
+            - --fuzig-bin=/fuzig/fuzig
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+            - mountPath: /var/lib/kubelet
+              mountPropagation: Bidirectional
+              name: kubelet-dir
+          securityContext:
+            # This is needed for the bidirectional mount.
+            privileged: true
+
+        - name: node-driver-registrar
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.10.0
+          args:
+            - --csi-address=/csi/csi.sock
+            - --kubelet-registration-path=/var/lib/kubelet/plugins/fuzig/csi.sock
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+            - mountPath: /registration
+              name: registration-dir
+
+      volumes:
+        - hostPath:
+            path: /var/lib/kubelet
+            type: Directory
+          name: kubelet-dir
+        - hostPath:
+            path: /var/lib/kubelet/plugins_registry
+            type: Directory
+          name: registration-dir
+        - hostPath:
+            path: /var/lib/kubelet/plugins/fuzig
+            type: DirectoryOrCreate
+          name: socket-dir
